@@ -27,6 +27,7 @@ class Store:
         self.lock = threading.Lock()
         self.participants: Dict[str, Participant] = {}  # session_id -> Participant
         self.reveal: bool = False
+        # Legacy attributes kept for compatibility with cached Store objects
         self.session_active: bool = False
         self.scrum_master_session_id: Optional[str] = None
         self.session_generation: int = 0
@@ -84,9 +85,6 @@ def touch_participant(store: Store, session_id: str, name: str) -> None:
             if sid != session_id and participant.name.strip().lower() == name.lower()
         ]
         for dup_id in duplicate_ids:
-            if store.scrum_master_session_id == dup_id:
-                # Transfer Scrum Master role to the latest active session for this name
-                store.scrum_master_session_id = session_id
             del store.participants[dup_id]
 
 
@@ -96,7 +94,8 @@ def set_estimate(store: Store, session_id: str, value: str) -> None:
 
     with store.lock:
         _prune_stale(store)
-        if (not store.session_active) or store.reveal:
+        # Do not allow changing estimates after scores are revealed
+        if store.reveal:
             return
         if session_id in store.participants:
             store.participants[session_id].estimate = value
@@ -114,53 +113,15 @@ def reset_story(store: Store) -> None:
 def reveal_all(store: Store) -> None:
     with store.lock:
         _prune_stale(store)
-        if not store.session_active:
-            return
         store.reveal = True
 
 
-def start_session(store: Store) -> None:
-    with store.lock:
-        _prune_stale(store)
-        if store.scrum_master_session_id is None:
-            return
-        store.session_active = True
-        store.reveal = False
-        for p in store.participants.values():
-            p.estimate = None
-
-
-def end_session(store: Store) -> None:
-    with store.lock:
-        _prune_stale(store)
-        # Bump generation and fully clear all session state
-        store.session_generation += 1
-        store.participants.clear()
-        store.scrum_master_session_id = None
-        store.session_active = False
-        store.reveal = False
-
-
-def become_scrum_master(store: Store, session_id: str) -> None:
-    with store.lock:
-        _prune_stale(store)
-        if store.scrum_master_session_id is None:
-            store.scrum_master_session_id = session_id
-            store.session_active = False
-            store.reveal = False
-
-
-def get_state_snapshot(store: Store) -> Tuple[bool, bool, Optional[str], List[Tuple[str, Participant]]]:
+def get_state_snapshot(store: Store) -> Tuple[bool, List[Tuple[str, Participant]]]:
     with store.lock:
         _prune_stale(store)
         reveal = store.reveal
-        session_active = store.session_active and (store.scrum_master_session_id is not None)
-        if not session_active:
-            store.session_active = False
-            store.reveal = False
-        scrum_master_session_id = store.scrum_master_session_id
         items = sorted(store.participants.items(), key=lambda kv: kv[1].name.lower())
-        return reveal, session_active, scrum_master_session_id, items
+        return reveal, items
 
 
 def display_value(v: Optional[str]) -> str:
@@ -226,11 +187,6 @@ st_autorefresh(interval=REFRESH_MS, key="auto_refresh")
 
 store = get_store()
 
-# Safety: if a cached Store from an older version is loaded on Streamlit Cloud,
-# make sure it has the new session_generation attribute before we use it.
-if not hasattr(store, "session_generation"):
-    store.session_generation = 0
-
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 if "joined" not in st.session_state:
@@ -239,17 +195,10 @@ if "name" not in st.session_state:
     st.session_state.name = ""
 if "selected" not in st.session_state:
     st.session_state.selected = None
-if "session_generation" not in st.session_state:
-    st.session_state.session_generation = 0
 
 session_id: str = st.session_state.session_id
 
 st.title("Sprint Story Estimation")
-
-# If a new session generation has started, force everyone to re-join
-if st.session_state.joined and st.session_state.session_generation != store.session_generation:
-    st.session_state.joined = False
-    st.session_state.selected = None
 
 if not st.session_state.joined:
     st.subheader("Join session")
@@ -259,7 +208,6 @@ if not st.session_state.joined:
         if cleaned:
             st.session_state.name = cleaned
             st.session_state.joined = True
-            st.session_state.session_generation = store.session_generation
             touch_participant(store, session_id, cleaned)
             st.rerun()
 
@@ -273,62 +221,31 @@ if not name.strip():
 
 touch_participant(store, session_id, name)
 
-reveal, session_active, scrum_master_sid, participants = get_state_snapshot(store)
-
-is_scrum_master = scrum_master_sid == session_id
+reveal, participants = get_state_snapshot(store)
 
 header_left, header_right = st.columns([2, 1])
 with header_left:
     st.markdown(f"**You are:** {name}")
-    st.caption(f"Session: {'Active' if session_active else 'Not started'}")
 with header_right:
-    if scrum_master_sid is None:
-        if st.button("Become Scrum Master", use_container_width=True):
-            become_scrum_master(store, session_id)
-            st.rerun()
-    else:
-        scrum_master_name = next((p.name for sid, p in participants if sid == scrum_master_sid), "(unknown)")
-        st.markdown(f"**Scrum Master:** {scrum_master_name}")
-
-if is_scrum_master:
-    # Top row: Start / End (colored differently)
+    # Global controls: anyone can Reveal / Reset
     with st.container():
-        st.markdown("<div class='scrum-controls-row'>", unsafe_allow_html=True)
-        top_controls = st.columns(3)
-        with top_controls[0]:
-            if st.button("Start Session", use_container_width=True, disabled=session_active):
-                start_session(store)
-                st.session_state.selected = None
+        st.markdown("<div class='scrum-controls-row-secondary'>", unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Reveal", use_container_width=True, disabled=reveal):
+                reveal_all(store)
                 st.rerun()
-        with top_controls[1]:
-            if st.button("End Session", use_container_width=True):
-                end_session(store)
-                st.session_state.joined = False
-                st.session_state.selected = None
-                st.rerun()
-        with top_controls[2]:
-            if st.button("Reset", use_container_width=True, disabled=not session_active):
+        with c2:
+            if st.button("Reset", use_container_width=True):
                 reset_story(store)
                 st.session_state.selected = None
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Second row: Reveal + (spacer)
-    with st.container():
-        st.markdown("<div class='scrum-controls-row-secondary'>", unsafe_allow_html=True)
-        reveal_col, _ = st.columns(2)
-        with reveal_col:
-            if st.button("Reveal", use_container_width=True, disabled=not session_active):
-                reveal_all(store)
-                st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+if not reveal:
+    st.info("Pick your estimate. Scores stay hidden until someone clicks Reveal.")
 else:
-    if not session_active:
-        st.info("Session has not started yet. Waiting for Scrum Master.")
-    elif not reveal:
-        st.info("Pick your estimate. Scores stay hidden until Scrum Master reveals.")
-    else:
-        st.info("Scrum Master revealed the scores.")
+    st.info("Scores revealed. Use Reset to start a new story.")
 
 left, right = st.columns([2, 1])
 
@@ -344,7 +261,7 @@ with left:
                 label,
                 key=f"card_{v}",
                 use_container_width=True,
-                disabled=(not session_active) or reveal,
+                disabled=reveal,
             ):
                 st.session_state.selected = v
                 set_estimate(store, session_id, v)
@@ -355,7 +272,7 @@ with left:
 with right:
     st.subheader("Participants")
 
-    reveal, session_active, scrum_master_sid, participants = get_state_snapshot(store)
+    reveal, participants = get_state_snapshot(store)
 
     waiting_count = 0
     for sid, p in participants:
