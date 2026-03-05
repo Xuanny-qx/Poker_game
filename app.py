@@ -74,6 +74,18 @@ def touch_participant(store: Store, session_id: str, name: str) -> None:
             p.name = name
             p.last_seen = _now()
 
+        # Ensure only one entry per name (case-insensitive) across all sessions
+        duplicate_ids = [
+            sid
+            for sid, participant in store.participants.items()
+            if sid != session_id and participant.name.strip().lower() == name.lower()
+        ]
+        for dup_id in duplicate_ids:
+            if store.scrum_master_session_id == dup_id:
+                # Transfer Scrum Master role to the latest active session for this name
+                store.scrum_master_session_id = session_id
+            del store.participants[dup_id]
+
 
 def set_estimate(store: Store, session_id: str, value: str) -> None:
     if value not in FIB_VALUES:
