@@ -295,7 +295,10 @@ with right:
                 if not reveal:
                     row[1].markdown("Estimated")
                 else:
-                    row[1].markdown(display_value(p.estimate))
+                    row[1].markdown(
+                        f"<span style='font-size:1.4rem; font-weight:700;'>{display_value(p.estimate)}</span>",
+                        unsafe_allow_html=True,
+                    )
 
         # Show summary only after scores are revealed
         if reveal:
@@ -330,4 +333,7 @@ with right:
                 col = cols[idx % 4]
                 label = "☕" if key == "cup" else key
                 with col:
-                    st.write(f"{label}: {counts[key]}")
+                    st.markdown(
+                        f"<div style='font-size:1.1rem;'><strong>{label}</strong>: {counts[key]}</div>",
+                        unsafe_allow_html=True,
+                    )
