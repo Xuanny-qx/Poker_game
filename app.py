@@ -29,6 +29,7 @@ class Store:
         self.reveal: bool = False
         self.session_active: bool = False
         self.scrum_master_session_id: Optional[str] = None
+        self.session_generation: int = 0
 
 
 @st.cache_resource
@@ -49,6 +50,8 @@ def _prune_stale(store: Store) -> None:
         store.reveal = False
     if not hasattr(store, "scrum_master_session_id"):
         store.scrum_master_session_id = None
+    if not hasattr(store, "session_generation"):
+        store.session_generation = 0
 
     cutoff = _now() - STALE_SECONDS
     stale_ids = [sid for sid, p in store.participants.items() if p.last_seen < cutoff]
@@ -130,10 +133,12 @@ def start_session(store: Store) -> None:
 def end_session(store: Store) -> None:
     with store.lock:
         _prune_stale(store)
+        # Bump generation and fully clear all session state
+        store.session_generation += 1
+        store.participants.clear()
+        store.scrum_master_session_id = None
         store.session_active = False
         store.reveal = False
-        for p in store.participants.values():
-            p.estimate = None
 
 
 def become_scrum_master(store: Store, session_id: str) -> None:
@@ -203,10 +208,17 @@ if "name" not in st.session_state:
     st.session_state.name = ""
 if "selected" not in st.session_state:
     st.session_state.selected = None
+if "session_generation" not in st.session_state:
+    st.session_state.session_generation = 0
 
 session_id: str = st.session_state.session_id
 
 st.title("Sprint Story Estimation")
+
+# If a new session generation has started, force everyone to re-join
+if st.session_state.joined and st.session_state.session_generation != store.session_generation:
+    st.session_state.joined = False
+    st.session_state.selected = None
 
 if not st.session_state.joined:
     st.subheader("Join session")
@@ -216,6 +228,7 @@ if not st.session_state.joined:
         if cleaned:
             st.session_state.name = cleaned
             st.session_state.joined = True
+            st.session_state.session_generation = store.session_generation
             touch_participant(store, session_id, cleaned)
             st.rerun()
 
@@ -247,22 +260,28 @@ with header_right:
         st.markdown(f"**Scrum Master:** {scrum_master_name}")
 
 if is_scrum_master:
-    c1, _ = st.columns(2)
-    with c1:
+    top_controls = st.columns(3)
+    with top_controls[0]:
         if st.button("Start Session", use_container_width=True, disabled=session_active):
             start_session(store)
             st.session_state.selected = None
             st.rerun()
-
-    c3, c4 = st.columns(2)
-    with c3:
-        if st.button("Reveal", use_container_width=True, disabled=not session_active):
-            reveal_all(store)
+    with top_controls[1]:
+        if st.button("End Session", use_container_width=True):
+            end_session(store)
+            st.session_state.joined = False
+            st.session_state.selected = None
             st.rerun()
-    with c4:
+    with top_controls[2]:
         if st.button("Reset", use_container_width=True, disabled=not session_active):
             reset_story(store)
             st.session_state.selected = None
+            st.rerun()
+
+    reveal_col, _ = st.columns(2)
+    with reveal_col:
+        if st.button("Reveal", use_container_width=True, disabled=not session_active):
+            reveal_all(store)
             st.rerun()
 else:
     if not session_active:
