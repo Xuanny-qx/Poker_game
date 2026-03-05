@@ -171,7 +171,6 @@ if "selected" not in st.session_state:
 session_id: str = st.session_state.session_id
 
 st.title("Sprint Story Estimation")
-st.caption("Fibonacci planning poker: 1, 2, 3, 5, 8, 13, 21, plus ☕")
 
 if not st.session_state.joined:
     st.subheader("Join session")
@@ -212,15 +211,10 @@ with header_right:
         st.markdown(f"**Scrum Master:** {scrum_master_name}")
 
 if is_scrum_master:
-    c1, c2 = st.columns(2)
+    c1, _ = st.columns(2)
     with c1:
         if st.button("Start Session", use_container_width=True, disabled=session_active):
             start_session(store)
-            st.session_state.selected = None
-            st.rerun()
-    with c2:
-        if st.button("End Session", use_container_width=True, disabled=not session_active):
-            end_session(store)
             st.session_state.selected = None
             st.rerun()
 
