@@ -200,6 +200,11 @@ st_autorefresh(interval=REFRESH_MS, key="auto_refresh")
 
 store = get_store()
 
+# Safety: if a cached Store from an older version is loaded on Streamlit Cloud,
+# make sure it has the new session_generation attribute before we use it.
+if not hasattr(store, "session_generation"):
+    store.session_generation = 0
+
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 if "joined" not in st.session_state:
