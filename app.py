@@ -175,6 +175,7 @@ st.set_page_config(page_title="Sprint Story Estimation", page_icon="☕", layout
 st.markdown(
     """
     <style>
+    /* Base button style */
     div.stButton > button {
         border-radius: 0.7rem;
         padding: 0.65rem 0.95rem;
@@ -189,6 +190,31 @@ st.markdown(
         box-shadow: 0 4px 10px rgba(15, 23, 42, 0.20);
         transform: translateY(-1px);
         border-color: #2563eb;
+    }
+
+    /* Scrum master controls: first row */
+    .scrum-controls-row div.stButton:nth-of-type(1) > button {
+        background: #2563eb;
+        border-color: #1d4ed8;
+        color: #f9fafb;
+    }
+    .scrum-controls-row div.stButton:nth-of-type(1) > button:hover {
+        background: #1d4ed8;
+    }
+
+    .scrum-controls-row div.stButton:nth-of-type(2) > button {
+        background: #dc2626;
+        border-color: #b91c1c;
+        color: #fef2f2;
+    }
+    .scrum-controls-row div.stButton:nth-of-type(2) > button:hover {
+        background: #b91c1c;
+    }
+
+    /* Second row (Reveal / Reset) - softer background */
+    .scrum-controls-row-secondary div.stButton > button {
+        background: #f9fafb;
+        border-color: #d1d5db;
     }
     </style>
     """,
@@ -265,29 +291,37 @@ with header_right:
         st.markdown(f"**Scrum Master:** {scrum_master_name}")
 
 if is_scrum_master:
-    top_controls = st.columns(3)
-    with top_controls[0]:
-        if st.button("Start Session", use_container_width=True, disabled=session_active):
-            start_session(store)
-            st.session_state.selected = None
-            st.rerun()
-    with top_controls[1]:
-        if st.button("End Session", use_container_width=True):
-            end_session(store)
-            st.session_state.joined = False
-            st.session_state.selected = None
-            st.rerun()
-    with top_controls[2]:
-        if st.button("Reset", use_container_width=True, disabled=not session_active):
-            reset_story(store)
-            st.session_state.selected = None
-            st.rerun()
+    # Top row: Start / End (colored differently)
+    with st.container():
+        st.markdown("<div class='scrum-controls-row'>", unsafe_allow_html=True)
+        top_controls = st.columns(3)
+        with top_controls[0]:
+            if st.button("Start Session", use_container_width=True, disabled=session_active):
+                start_session(store)
+                st.session_state.selected = None
+                st.rerun()
+        with top_controls[1]:
+            if st.button("End Session", use_container_width=True):
+                end_session(store)
+                st.session_state.joined = False
+                st.session_state.selected = None
+                st.rerun()
+        with top_controls[2]:
+            if st.button("Reset", use_container_width=True, disabled=not session_active):
+                reset_story(store)
+                st.session_state.selected = None
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    reveal_col, _ = st.columns(2)
-    with reveal_col:
-        if st.button("Reveal", use_container_width=True, disabled=not session_active):
-            reveal_all(store)
-            st.rerun()
+    # Second row: Reveal + (spacer)
+    with st.container():
+        st.markdown("<div class='scrum-controls-row-secondary'>", unsafe_allow_html=True)
+        reveal_col, _ = st.columns(2)
+        with reveal_col:
+            if st.button("Reveal", use_container_width=True, disabled=not session_active):
+                reveal_all(store)
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 else:
     if not session_active:
         st.info("Session has not started yet. Waiting for Scrum Master.")
