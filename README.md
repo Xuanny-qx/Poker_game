@@ -8,6 +8,7 @@ Streamlit-based planning poker app for sprint story estimation.
 - Users enter their name to join
 - Estimates are hidden until the Scrum Master reveals
 - Participant list updates automatically (shows who is still waiting)
+- Only Scrum Master can start/end the session and reveal/reset
 
 ## Run locally
 
