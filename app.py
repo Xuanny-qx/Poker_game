@@ -166,6 +166,30 @@ def display_value(v: Optional[str]) -> str:
 
 st.set_page_config(page_title="Sprint Story Estimation", page_icon="☕", layout="wide")
 
+# Global UI tweaks (cards-style buttons, slightly nicer typography)
+st.markdown(
+    """
+    <style>
+    div.stButton > button {
+        border-radius: 0.7rem;
+        padding: 0.65rem 0.95rem;
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #111827;
+        font-weight: 600;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+        transition: all 0.12s ease-in-out;
+    }
+    div.stButton > button:hover {
+        box-shadow: 0 4px 10px rgba(15, 23, 42, 0.20);
+        transform: translateY(-1px);
+        border-color: #2563eb;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Auto-refresh to simulate realtime updates across connected users
 st_autorefresh(interval=REFRESH_MS, key="auto_refresh")
 
@@ -285,18 +309,43 @@ with right:
     if not participants:
         st.write("No participants yet.")
     else:
-        for sid, p in participants:
+        # Sort so people who haven't estimated appear first
+        sorted_participants = sorted(
+            participants,
+            key=lambda item: (item[1].estimate is not None, item[1].name.lower()),
+        )
+
+        for sid, p in sorted_participants:
             row = st.columns([2, 1])
             row[0].markdown(f"**{p.name}**")
 
             if p.estimate is None:
-                row[1].markdown("Waiting…")
+                dot_color = "#f97373"  # red
+                label_html = "Waiting…"
+                row[1].markdown(
+                    f"<span style='display:inline-flex;align-items:center;'>"
+                    f"<span style='width:10px;height:10px;border-radius:999px;background:{dot_color};margin-right:6px;'></span>"
+                    f"<span style='font-size:0.95rem;'>Waiting…</span>"
+                    f"</span>",
+                    unsafe_allow_html=True,
+                )
             else:
                 if not reveal:
-                    row[1].markdown("Estimated")
-                else:
+                    dot_color = "#facc15"  # amber
                     row[1].markdown(
-                        f"<span style='font-size:1.4rem; font-weight:700;'>{display_value(p.estimate)}</span>",
+                        f"<span style='display:inline-flex;align-items:center;'>"
+                        f"<span style='width:10px;height:10px;border-radius:999px;background:{dot_color};margin-right:6px;'></span>"
+                        f"<span style='font-size:0.95rem;'>Estimated</span>"
+                        f"</span>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    dot_color = "#4ade80"  # green
+                    row[1].markdown(
+                        f"<span style='display:inline-flex;align-items:center;'>"
+                        f"<span style='width:10px;height:10px;border-radius:999px;background:{dot_color};margin-right:6px;'></span>"
+                        f"<span style='font-size:1.4rem;font-weight:700;'>{display_value(p.estimate)}</span>"
+                        f"</span>",
                         unsafe_allow_html=True,
                     )
 
