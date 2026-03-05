@@ -41,6 +41,15 @@ def _now() -> float:
 
 
 def _prune_stale(store: Store) -> None:
+    # Backwards-compat for older cached Store instances on Streamlit Cloud
+    # that may not yet have the newer attributes.
+    if not hasattr(store, "session_active"):
+        store.session_active = False
+    if not hasattr(store, "reveal"):
+        store.reveal = False
+    if not hasattr(store, "scrum_master_session_id"):
+        store.scrum_master_session_id = None
+
     cutoff = _now() - STALE_SECONDS
     stale_ids = [sid for sid, p in store.participants.items() if p.last_seen < cutoff]
     for sid in stale_ids:
