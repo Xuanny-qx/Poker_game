@@ -296,3 +296,38 @@ with right:
                     row[1].markdown("Estimated")
                 else:
                     row[1].markdown(display_value(p.estimate))
+
+        # Show summary only after scores are revealed
+        if reveal:
+            numeric_values = []
+            counts = {v: 0 for v in FIB_VALUES}
+            for _, p in participants:
+                if p.estimate is None:
+                    continue
+                if p.estimate in counts:
+                    counts[p.estimate] += 1
+                # Only numeric values contribute to the average
+                if p.estimate.isdigit():
+                    try:
+                        numeric_values.append(int(p.estimate))
+                    except ValueError:
+                        pass
+
+            st.markdown("---")
+            st.subheader("Results summary")
+
+            avg_col, _ = st.columns(2)
+            with avg_col:
+                if numeric_values:
+                    avg_value = sum(numeric_values) / len(numeric_values)
+                    st.metric("Average story points", f"{avg_value:.2f}")
+                else:
+                    st.metric("Average story points", "–")
+
+            st.markdown("**Counts per score**")
+            cols = st.columns(4)
+            for idx, key in enumerate(FIB_VALUES):
+                col = cols[idx % 4]
+                label = "☕" if key == "cup" else key
+                with col:
+                    st.write(f"{label}: {counts[key]}")
